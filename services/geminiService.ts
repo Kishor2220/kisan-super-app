@@ -37,10 +37,10 @@ export const getGeminiResponse = async (
 
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: modelId,
-      contents: { parts: contents as any }, // Type casting for mixed content parts
+      contents: { parts: contents as any },
       config: {
         systemInstruction: ASSISTANT_INSTRUCTION,
-        temperature: 0.4, // Lower temperature for more factual advice
+        temperature: 0.4, 
         maxOutputTokens: 500,
       }
     });
@@ -49,5 +49,38 @@ export const getGeminiResponse = async (
   } catch (error) {
     console.error("Gemini API Error:", error);
     return "Error connecting to KisanSathi server. Please check your internet.";
+  }
+};
+
+// New function to generate specific market advice based on structured data
+export const getMarketAdvisory = async (
+  crop: string,
+  currentPrice: number,
+  predictedTrend: string,
+  weatherCondition: string,
+  language: string
+): Promise<string> => {
+  try {
+    const prompt = `
+    Context: Indian Farmer Market Decision.
+    Crop: ${crop}
+    Current Price: ₹${currentPrice}
+    Tomorrow's Trend: ${predictedTrend}
+    Weather: ${weatherCondition}
+    
+    Task: Give 1 sentence of actionable advice. Should he sell now or wait? 
+    Example: "Since rain is coming and prices are dropping, harvest and sell today."
+    ${language === 'hi' ? "Output in Hindi." : "Output in English."}
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: { parts: [{ text: prompt }] },
+      config: { temperature: 0.3, maxOutputTokens: 100 }
+    });
+
+    return response.text || "Market is volatile. Please check locally.";
+  } catch (e) {
+    return "Advisory unavailable offline.";
   }
 };

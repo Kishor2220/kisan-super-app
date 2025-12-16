@@ -11,6 +11,21 @@ export interface MandiPrice {
   price: number;
   change: number; // Percentage change
   date: string;
+  trend: 'up' | 'down' | 'stable';
+  arrivalVolume: 'low' | 'medium' | 'high';
+}
+
+export interface HistoricalDataPoint {
+  date: string;
+  price: number;
+}
+
+export interface MarketPrediction {
+  tomorrowMin: number;
+  tomorrowMax: number;
+  confidence: 'low' | 'medium' | 'high';
+  trendDirection: 'up' | 'down' | 'stable';
+  factors: string[]; // e.g., "High Arrivals", "Rain Forecast"
 }
 
 export interface Scheme {
@@ -28,6 +43,7 @@ export interface WeatherData {
   humidity: number;
   windSpeed: number;
   advisory: string;
+  rainChance?: number; // percentage
 }
 
 export interface ChatMessage {
