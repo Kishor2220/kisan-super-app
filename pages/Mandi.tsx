@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowUp, ArrowDown, TrendingUp, Filter, ChevronLeft, CloudRain, AlertCircle, Calendar, Newspaper } from 'lucide-react';
+import { ArrowUp, ArrowDown, TrendingUp, Filter, ChevronLeft, CloudRain, AlertCircle, Calendar, Newspaper, MapPin, RefreshCw } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { MandiPrice, AppLanguage, HistoricalDataPoint, MarketPrediction } from '../types';
-import { getMarketAdvisory, getMandiNews } from '../services/geminiService';
+import { getMarketAdvisory, getMandiNews, getRealMandiPrices } from '../services/geminiService';
 
 interface MandiProps {
   lang: AppLanguage;
@@ -15,16 +15,12 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
   const [historyPeriod, setHistoryPeriod] = useState<7 | 15 | 30>(7);
   const [news, setNews] = useState<string>('');
   const [loadingNews, setLoadingNews] = useState(false);
+  
+  const [prices, setPrices] = useState<MandiPrice[]>([]);
+  const [loadingPrices, setLoadingPrices] = useState(true);
+  const [locationName, setLocationName] = useState('');
 
-  // Mock Data: Current Prices
-  const prices: MandiPrice[] = [
-    { id: '1', crop: 'Onion', variety: 'Red', market: 'Lasalgaon', price: 2400, change: 5.2, date: '2023-10-24', trend: 'up', arrivalVolume: 'low' },
-    { id: '2', crop: 'Soybean', variety: 'Yellow', market: 'Latur', price: 4800, change: -1.5, date: '2023-10-24', trend: 'down', arrivalVolume: 'high' },
-    { id: '3', crop: 'Cotton', variety: 'Medium', market: 'Akola', price: 6900, change: 0.8, date: '2023-10-24', trend: 'stable', arrivalVolume: 'medium' },
-    { id: '4', crop: 'Tomato', variety: 'Hybrid', market: 'Nashik', price: 1200, change: -12.0, date: '2023-10-24', trend: 'down', arrivalVolume: 'high' },
-  ];
-
-  // Helper to generate mock historical data based on trend
+  // Helper to generate mock historical data based on trend (since real history is hard to scrape in one go)
   const getHistoricalData = (basePrice: number, days: number): HistoricalDataPoint[] => {
     const data: HistoricalDataPoint[] = [];
     let current = basePrice;
@@ -44,7 +40,7 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
     return data;
   };
 
-  // Helper to generate mock prediction
+  // Helper to generate mock prediction based on real current trend
   const getPrediction = (price: MandiPrice): MarketPrediction => {
     const volatility = 0.04; // 4% daily swing
     const multiplier = price.trend === 'up' ? 1.02 : price.trend === 'down' ? 0.98 : 1.0;
@@ -59,10 +55,60 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
     };
   };
 
+  const fetchPrices = () => {
+    setLoadingPrices(true);
+    // Try to get location, else default to Maharashtra
+    if (navigator.geolocation) {
+       navigator.geolocation.getCurrentPosition(
+        (pos) => {
+           // In a real app we'd reverse geocode here. 
+           // For this demo, we'll pass coords or a default region if we can't reverse geocode easily without an API key.
+           // We will assume a default region 'Maharashtra' for the prompt if we can't get city, 
+           // but let's try to just pass "nearby" to the LLM.
+           getRealMandiPrices(`lat ${pos.coords.latitude} long ${pos.coords.longitude}`, lang).then(data => {
+             if (data.length > 0) setPrices(data);
+             else setPrices(getMockPrices()); // Fallback
+             setLoadingPrices(false);
+             setLocationName(lang === AppLanguage.HINDI ? 'आपके पास' : 'Nearby');
+           });
+        },
+        () => {
+           // Error or permission denied
+           getRealMandiPrices("Maharashtra", lang).then(data => {
+             if (data.length > 0) setPrices(data);
+             else setPrices(getMockPrices());
+             setLoadingPrices(false);
+             setLocationName('Maharashtra');
+           });
+        }
+       );
+    } else {
+       setPrices(getMockPrices());
+       setLoadingPrices(false);
+    }
+  };
+
+  // Fallback mock data if API fails
+  const getMockPrices = (): MandiPrice[] => [
+    { id: '1', crop: 'Onion', variety: 'Red', market: 'Lasalgaon', price: 2400, change: 5.2, date: 'Today', trend: 'up', arrivalVolume: 'low' },
+    { id: '2', crop: 'Soybean', variety: 'Yellow', market: 'Latur', price: 4800, change: -1.5, date: 'Today', trend: 'down', arrivalVolume: 'high' },
+    { id: '3', crop: 'Cotton', variety: 'Medium', market: 'Akola', price: 6900, change: 0.8, date: 'Today', trend: 'stable', arrivalVolume: 'medium' },
+    { id: '4', crop: 'Tomato', variety: 'Hybrid', market: 'Nashik', price: 1200, change: -12.0, date: 'Today', trend: 'down', arrivalVolume: 'high' },
+  ];
+
+  useEffect(() => {
+    fetchPrices();
+    // Fetch news
+    setLoadingNews(true);
+    getMandiNews(lang).then(newsText => {
+      setNews(newsText);
+      setLoadingNews(false);
+    });
+  }, [lang]);
+
   useEffect(() => {
     if (selectedCrop) {
       setLoadingAdvisory(true);
-      // Mock weather context
       const weatherCtx = selectedCrop.trend === 'down' ? 'Heavy Rain Expected' : 'Clear Sky';
       
       getMarketAdvisory(
@@ -78,14 +124,6 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
     }
   }, [selectedCrop, lang]);
 
-  useEffect(() => {
-    // Fetch news when component mounts or lang changes
-    setLoadingNews(true);
-    getMandiNews(lang).then(newsText => {
-      setNews(newsText);
-      setLoadingNews(false);
-    });
-  }, [lang]);
 
   const renderDetailView = () => {
     if (!selectedCrop) return null;
@@ -95,7 +133,6 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
 
     return (
       <div className="animate-fade-in">
-        {/* Nav Back */}
         <button 
           onClick={() => setSelectedCrop(null)}
           className="flex items-center text-gray-600 mb-4 bg-white px-3 py-1 rounded-full shadow-sm border border-gray-200"
@@ -103,7 +140,6 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
           <ChevronLeft size={18} /> {isHindi ? 'पीछे जाएं' : 'Back'}
         </button>
 
-        {/* Header */}
         <div className="flex justify-between items-start mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">{selectedCrop.crop}</h1>
@@ -115,7 +151,6 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
           </div>
         </div>
 
-        {/* Prediction Card */}
         <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-xl p-5 text-white shadow-lg mb-6 relative overflow-hidden">
            <div className="absolute top-0 right-0 p-4 opacity-20">
              <Calendar size={64} />
@@ -142,7 +177,6 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
            </p>
         </div>
 
-        {/* Advisory / AI Insight */}
         <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl mb-6">
           <h3 className="font-bold text-yellow-800 flex items-center gap-2 mb-2">
             <AlertCircle size={18} /> {isHindi ? 'किसान साथी सलाह' : 'KisanSathi Advisor'}
@@ -156,7 +190,6 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
           )}
         </div>
 
-        {/* Chart Section */}
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-bold text-gray-700">{isHindi ? 'पिछले दाम' : 'Price History'}</h3>
@@ -194,21 +227,6 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
             </ResponsiveContainer>
           </div>
         </div>
-
-        {/* Weather Impact */}
-        <div className="mt-6 flex gap-4">
-            <div className="flex-1 bg-blue-50 p-4 rounded-xl border border-blue-100">
-               <div className="flex items-center gap-2 mb-2 text-blue-800 font-bold">
-                 <CloudRain size={18} /> {isHindi ? 'मौसम' : 'Weather'}
-               </div>
-               <p className="text-xs text-blue-700">
-                 {selectedCrop.trend === 'down' 
-                   ? (isHindi ? 'बारिश की संभावना, कटाई रोकें।' : 'Rain likely. Delay harvest to avoid moisture.') 
-                   : (isHindi ? 'मौसम साफ है।' : 'Clear weather expected.')}
-               </p>
-            </div>
-        </div>
-
       </div>
     );
   };
@@ -218,37 +236,53 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
       {selectedCrop ? renderDetailView() : (
         <>
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-800">
-              {lang === AppLanguage.HINDI ? 'मंडी भाव' : 'Mandi Prices'}
-            </h1>
-            <button className="p-2 bg-white rounded-lg shadow-sm text-gray-600 border border-gray-200">
-              <Filter size={20} />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">
+                {lang === AppLanguage.HINDI ? 'मंडी भाव' : 'Mandi Prices'}
+              </h1>
+              <p className="text-xs text-gray-500 flex items-center gap-1">
+                <MapPin size={12} /> {locationName || 'India'}
+              </p>
+            </div>
+            <button onClick={fetchPrices} className="p-2 bg-white rounded-lg shadow-sm text-gray-600 border border-gray-200">
+              <RefreshCw size={20} className={loadingPrices ? 'animate-spin' : ''} />
             </button>
           </div>
 
           <div className="space-y-3">
-            {prices.map((item) => (
-              <div 
-                key={item.id} 
-                onClick={() => setSelectedCrop(item)}
-                className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer hover:border-green-300 transition-colors"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-gray-800 text-lg">{item.crop}</h3>
-                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{item.variety}</span>
+            {loadingPrices ? (
+              // Skeletons
+              [1,2,3].map(i => (
+                <div key={i} className="bg-white h-24 rounded-xl shadow-sm border border-gray-100 animate-pulse"></div>
+              ))
+            ) : prices.length > 0 ? (
+              prices.map((item) => (
+                <div 
+                  key={item.id} 
+                  onClick={() => setSelectedCrop(item)}
+                  className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer hover:border-green-300 transition-colors"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-gray-800 text-lg">{item.crop}</h3>
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{item.variety}</span>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-1">📍 {item.market}</p>
                   </div>
-                  <p className="text-sm text-gray-500 mt-1">📍 {item.market}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-xl text-gray-800">₹{item.price}</p>
-                  <div className={`text-xs font-medium flex items-center justify-end gap-1 ${item.change >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                    {item.change >= 0 ? <TrendingUp size={12} /> : <TrendingUp size={12} className="rotate-180" />}
-                    {item.change >= 0 ? '+' : ''}{item.change}%
+                  <div className="text-right">
+                    <p className="font-bold text-xl text-gray-800">₹{item.price}</p>
+                    <div className={`text-xs font-medium flex items-center justify-end gap-1 ${item.change >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {item.change >= 0 ? <TrendingUp size={12} /> : <TrendingUp size={12} className="rotate-180" />}
+                      {item.change >= 0 ? '+' : ''}{item.change}%
+                    </div>
                   </div>
                 </div>
+              ))
+            ) : (
+              <div className="text-center py-10 text-gray-500">
+                <p>No prices found.</p>
               </div>
-            ))}
+            )}
           </div>
           
           <div className="mt-6 p-4 bg-white border border-gray-200 rounded-lg shadow-sm">

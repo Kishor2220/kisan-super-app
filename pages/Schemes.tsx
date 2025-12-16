@@ -1,12 +1,22 @@
-import React from 'react';
-import { Search, ChevronRight, CheckCircle, Clock } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, ChevronRight, CheckCircle, Clock, Send, Loader2 } from 'lucide-react';
 import { Scheme, AppLanguage } from '../types';
+import { getSchemeRecommendations } from '../services/geminiService';
 
 interface SchemesProps {
   lang: AppLanguage;
 }
 
 const Schemes: React.FC<SchemesProps> = ({ lang }) => {
+  const [showModal, setShowModal] = useState(false);
+  const [loadingRecs, setLoadingRecs] = useState(false);
+  const [recommendations, setRecommendations] = useState<string | null>(null);
+  
+  // Form State
+  const [landSize, setLandSize] = useState('');
+  const [stateName, setStateName] = useState('');
+  const [crop, setCrop] = useState('');
+
   const schemes: Scheme[] = [
     {
       id: '1',
@@ -33,8 +43,19 @@ const Schemes: React.FC<SchemesProps> = ({ lang }) => {
     }
   ];
 
+  const handleCheckEligibility = async () => {
+    if (!landSize || !stateName) return;
+    
+    setLoadingRecs(true);
+    const profile = `Land Size: ${landSize} acres, State: ${stateName}, Main Crop: ${crop}`;
+    
+    const result = await getSchemeRecommendations(profile, lang);
+    setRecommendations(result);
+    setLoadingRecs(false);
+  };
+
   return (
-    <div className="pb-20 pt-4 px-4 max-w-md mx-auto min-h-screen bg-gray-50">
+    <div className="pb-20 pt-4 px-4 max-w-md mx-auto min-h-screen bg-gray-50 relative">
       <h1 className="text-2xl font-bold text-gray-800 mb-2">
         {lang === AppLanguage.HINDI ? 'सरकारी योजनाएं' : 'Government Schemes'}
       </h1>
@@ -46,7 +67,10 @@ const Schemes: React.FC<SchemesProps> = ({ lang }) => {
       <div className="bg-gradient-to-r from-green-600 to-green-700 rounded-xl p-5 text-white shadow-md mb-6">
         <h2 className="font-bold text-lg mb-2">Am I Eligible?</h2>
         <p className="text-green-100 text-sm mb-4">Answer 3 questions to find schemes meant for you.</p>
-        <button className="bg-white text-green-700 px-4 py-2 rounded-lg text-sm font-bold shadow-sm w-full">
+        <button 
+          onClick={() => setShowModal(true)}
+          className="bg-white text-green-700 px-4 py-2 rounded-lg text-sm font-bold shadow-sm w-full active:scale-95 transition-transform"
+        >
           Check Now
         </button>
       </div>
@@ -86,6 +110,83 @@ const Schemes: React.FC<SchemesProps> = ({ lang }) => {
           </div>
         ))}
       </div>
+
+      {/* Interactive Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-fade-in max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+               <h2 className="text-xl font-bold text-gray-800">Eligibility Check</h2>
+               <button onClick={() => setShowModal(false)} className="text-gray-400 text-2xl">&times;</button>
+            </div>
+
+            {!recommendations ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Land Size (Acres)</label>
+                  <input 
+                    type="number" 
+                    value={landSize} 
+                    onChange={(e) => setLandSize(e.target.value)} 
+                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none" 
+                    placeholder="e.g. 2.5"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                  <select 
+                    value={stateName} 
+                    onChange={(e) => setStateName(e.target.value)}
+                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none bg-white"
+                  >
+                    <option value="">Select State</option>
+                    <option value="Maharashtra">Maharashtra</option>
+                    <option value="Punjab">Punjab</option>
+                    <option value="Uttar Pradesh">Uttar Pradesh</option>
+                    <option value="Karnataka">Karnataka</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Main Crop</label>
+                  <input 
+                    type="text" 
+                    value={crop} 
+                    onChange={(e) => setCrop(e.target.value)} 
+                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-green-500 outline-none" 
+                    placeholder="e.g. Wheat, Cotton"
+                  />
+                </div>
+
+                <button 
+                  onClick={handleCheckEligibility}
+                  disabled={loadingRecs || !landSize || !stateName}
+                  className="w-full bg-green-700 text-white py-3 rounded-xl font-bold mt-4 flex justify-center items-center gap-2 disabled:opacity-50"
+                >
+                  {loadingRecs ? <Loader2 className="animate-spin" /> : <Send size={18} />}
+                  Find My Schemes
+                </button>
+              </div>
+            ) : (
+              <div className="animate-fade-in">
+                <div className="bg-green-50 p-4 rounded-xl border border-green-100 mb-4">
+                  <h3 className="font-bold text-green-800 mb-2 flex items-center gap-2">
+                    <CheckCircle size={18} /> Recommended for You
+                  </h3>
+                  <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                    {recommendations}
+                  </div>
+                </div>
+                <button 
+                  onClick={() => { setRecommendations(null); setShowModal(false); }}
+                  className="w-full border border-gray-300 py-2 rounded-lg font-bold text-gray-600"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
