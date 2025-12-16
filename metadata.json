@@ -1,0 +1,9 @@
+{
+  "name": "Copy of KisanSathi - Indian Farmer Super App",
+  "description": "A comprehensive super app for Indian farmers to manage crops, market prices, government schemes, and receive AI-driven advisory.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
