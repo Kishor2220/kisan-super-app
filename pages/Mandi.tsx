@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowUp, ArrowDown, TrendingUp, Filter, ChevronLeft, CloudRain, AlertCircle, Calendar, Newspaper, MapPin, RefreshCw } from 'lucide-react';
+import { ArrowUp, ArrowDown, TrendingUp, ChevronLeft, AlertCircle, Calendar, Newspaper, MapPin, RefreshCw } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { MandiPrice, AppLanguage, HistoricalDataPoint, MarketPrediction } from '../types';
 import { getMarketAdvisory, getMandiNews, getRealMandiPrices } from '../services/geminiService';
@@ -18,31 +18,28 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
   
   const [prices, setPrices] = useState<MandiPrice[]>([]);
   const [loadingPrices, setLoadingPrices] = useState(true);
-  const [locationName, setLocationName] = useState('');
+  const [locationName, setLocationName] = useState('Karnataka');
 
-  // Helper to generate mock historical data based on trend (since real history is hard to scrape in one go)
   const getHistoricalData = (basePrice: number, days: number): HistoricalDataPoint[] => {
+    const locale = lang === AppLanguage.HINDI ? 'hi-IN' : (lang === AppLanguage.KANNADA ? 'kn-IN' : 'en-IN');
     const data: HistoricalDataPoint[] = [];
     let current = basePrice;
     for (let i = days; i >= 0; i--) {
       const date = new Date();
       date.setDate(date.getDate() - i);
-      // Random fluctuation +/- 3%
       const volatility = (Math.random() - 0.5) * 0.06; 
       current = current * (1 + volatility);
       data.push({
-        date: date.toLocaleDateString(lang === AppLanguage.HINDI ? 'hi-IN' : 'en-IN', { day: 'numeric', month: 'short' }),
+        date: date.toLocaleDateString(locale, { day: 'numeric', month: 'short' }),
         price: Math.round(current)
       });
     }
-    // Ensure last point matches current price approx
     data[data.length - 1].price = basePrice;
     return data;
   };
 
-  // Helper to generate mock prediction based on real current trend
   const getPrediction = (price: MandiPrice): MarketPrediction => {
-    const volatility = 0.04; // 4% daily swing
+    const volatility = 0.04; 
     const multiplier = price.trend === 'up' ? 1.02 : price.trend === 'down' ? 0.98 : 1.0;
     const base = price.price * multiplier;
     
@@ -57,28 +54,23 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
 
   const fetchPrices = () => {
     setLoadingPrices(true);
-    // Try to get location, else default to Maharashtra
+    // Default to Karnataka if location not found
     if (navigator.geolocation) {
        navigator.geolocation.getCurrentPosition(
         (pos) => {
-           // In a real app we'd reverse geocode here. 
-           // For this demo, we'll pass coords or a default region if we can't reverse geocode easily without an API key.
-           // We will assume a default region 'Maharashtra' for the prompt if we can't get city, 
-           // but let's try to just pass "nearby" to the LLM.
            getRealMandiPrices(`lat ${pos.coords.latitude} long ${pos.coords.longitude}`, lang).then(data => {
              if (data.length > 0) setPrices(data);
-             else setPrices(getMockPrices()); // Fallback
+             else setPrices(getMockPrices()); 
              setLoadingPrices(false);
-             setLocationName(lang === AppLanguage.HINDI ? 'आपके पास' : 'Nearby');
+             setLocationName(lang === AppLanguage.HINDI ? 'आपके पास' : (lang === AppLanguage.KANNADA ? 'ನಿಮ್ಮ ಹತ್ತಿರ' : 'Nearby'));
            });
         },
         () => {
-           // Error or permission denied
-           getRealMandiPrices("Maharashtra", lang).then(data => {
+           getRealMandiPrices("Karnataka", lang).then(data => {
              if (data.length > 0) setPrices(data);
              else setPrices(getMockPrices());
              setLoadingPrices(false);
-             setLocationName('Maharashtra');
+             setLocationName('Karnataka');
            });
         }
        );
@@ -88,17 +80,17 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
     }
   };
 
-  // Fallback mock data if API fails
+  // Karnataka Focused Mock Data
   const getMockPrices = (): MandiPrice[] => [
-    { id: '1', crop: 'Onion', variety: 'Red', market: 'Lasalgaon', price: 2400, change: 5.2, date: 'Today', trend: 'up', arrivalVolume: 'low' },
-    { id: '2', crop: 'Soybean', variety: 'Yellow', market: 'Latur', price: 4800, change: -1.5, date: 'Today', trend: 'down', arrivalVolume: 'high' },
-    { id: '3', crop: 'Cotton', variety: 'Medium', market: 'Akola', price: 6900, change: 0.8, date: 'Today', trend: 'stable', arrivalVolume: 'medium' },
-    { id: '4', crop: 'Tomato', variety: 'Hybrid', market: 'Nashik', price: 1200, change: -12.0, date: 'Today', trend: 'down', arrivalVolume: 'high' },
+    { id: '1', crop: 'Arecanut', variety: 'Rashi', market: 'Shivamogga', price: 46000, change: 1.2, date: 'Today', trend: 'up', arrivalVolume: 'medium' },
+    { id: '2', crop: 'Ragi', variety: 'Local', market: 'Mandya', price: 2800, change: 0.5, date: 'Today', trend: 'stable', arrivalVolume: 'high' },
+    { id: '3', crop: 'Cotton', variety: 'H-4', market: 'Raichur', price: 7200, change: -1.5, date: 'Today', trend: 'down', arrivalVolume: 'high' },
+    { id: '4', crop: 'Onion', variety: 'Pune', market: 'Hubballi', price: 2100, change: 4.0, date: 'Today', trend: 'up', arrivalVolume: 'low' },
+    { id: '5', crop: 'Tomato', variety: 'Hybrid', market: 'Kolar', price: 1800, change: -8.0, date: 'Today', trend: 'down', arrivalVolume: 'high' },
   ];
 
   useEffect(() => {
     fetchPrices();
-    // Fetch news
     setLoadingNews(true);
     getMandiNews(lang).then(newsText => {
       setNews(newsText);
@@ -110,36 +102,30 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
     if (selectedCrop) {
       setLoadingAdvisory(true);
       const weatherCtx = selectedCrop.trend === 'down' ? 'Heavy Rain Expected' : 'Clear Sky';
-      
-      getMarketAdvisory(
-        selectedCrop.crop, 
-        selectedCrop.price, 
-        selectedCrop.trend, 
-        weatherCtx,
-        lang
-      ).then(text => {
+      getMarketAdvisory(selectedCrop.crop, selectedCrop.price, selectedCrop.trend, weatherCtx, lang).then(text => {
         setAdvisory(text);
         setLoadingAdvisory(false);
       });
     }
   }, [selectedCrop, lang]);
 
+  const text = {
+    mandiPrices: lang === AppLanguage.HINDI ? 'मंडी भाव (कर्नाटक)' : (lang === AppLanguage.KANNADA ? 'ಮಂಡಿ ದರಗಳು (ಕರ್ನಾಟಕ)' : 'Mandi Prices (Karnataka)'),
+    mandiNews: lang === AppLanguage.HINDI ? 'मंडी समाचार' : (lang === AppLanguage.KANNADA ? 'ಮಂಡಿ ಸುದ್ದಿ' : 'Mandi News'),
+    back: lang === AppLanguage.HINDI ? 'पीछे' : (lang === AppLanguage.KANNADA ? 'ಹಿಂದೆ' : 'Back'),
+    advisorTitle: lang === AppLanguage.HINDI ? 'सलाह' : (lang === AppLanguage.KANNADA ? 'ಸಲಹೆ' : 'Advisory'),
+  };
 
   const renderDetailView = () => {
     if (!selectedCrop) return null;
     const history = getHistoricalData(selectedCrop.price, historyPeriod);
     const prediction = getPrediction(selectedCrop);
-    const isHindi = lang === AppLanguage.HINDI;
 
     return (
       <div className="animate-fade-in">
-        <button 
-          onClick={() => setSelectedCrop(null)}
-          className="flex items-center text-gray-600 mb-4 bg-white px-3 py-1 rounded-full shadow-sm border border-gray-200"
-        >
-          <ChevronLeft size={18} /> {isHindi ? 'पीछे जाएं' : 'Back'}
+        <button onClick={() => setSelectedCrop(null)} className="flex items-center text-gray-600 mb-4 bg-white px-3 py-1 rounded-full shadow-sm border border-gray-200">
+          <ChevronLeft size={18} /> {text.back}
         </button>
-
         <div className="flex justify-between items-start mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">{selectedCrop.crop}</h1>
@@ -152,60 +138,24 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
         </div>
 
         <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-xl p-5 text-white shadow-lg mb-6 relative overflow-hidden">
-           <div className="absolute top-0 right-0 p-4 opacity-20">
-             <Calendar size={64} />
-           </div>
-           <h3 className="text-indigo-200 text-sm font-semibold uppercase tracking-wider mb-2">
-             {isHindi ? 'कल का अनुमान (भाव)' : 'Tomorrow\'s Prediction'}
-           </h3>
+           <h3 className="text-indigo-200 text-sm font-semibold uppercase tracking-wider mb-2">Tomorrow Prediction</h3>
            <div className="flex items-end gap-3 mb-2">
              <span className="text-4xl font-bold">₹{prediction.tomorrowMin} - {prediction.tomorrowMax}</span>
            </div>
-           
            <div className="flex items-center gap-4 mt-3 text-sm">
               <div className="bg-white/20 px-2 py-1 rounded flex items-center gap-1">
-                <div className={`w-2 h-2 rounded-full ${prediction.confidence === 'high' ? 'bg-green-400' : 'bg-yellow-400'}`}></div>
-                <span>{isHindi ? 'भरोसा: मध्यम' : 'Confidence: Medium'}</span>
-              </div>
-              <div className="bg-white/20 px-2 py-1 rounded flex items-center gap-1">
-                 {selectedCrop.trend === 'down' ? <ArrowDown size={14} className="text-red-300"/> : <ArrowUp size={14} className="text-green-300"/>}
-                 <span>{isHindi ? 'रुझान' : 'Trend'}</span>
+                 {selectedCrop.trend === 'down' ? <ArrowDown size={14}/> : <ArrowUp size={14}/>}
+                 <span>{selectedCrop.trend.toUpperCase()}</span>
               </div>
            </div>
-           <p className="text-xs text-indigo-300 mt-3 italic border-t border-indigo-500/50 pt-2">
-             * {isHindi ? 'यह केवल एक अनुमान है। पक्का भाव मंडी में ही पता चलेगा।' : 'This is an estimate based on trends. Actual prices may vary.'}
-           </p>
         </div>
 
         <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-xl mb-6">
-          <h3 className="font-bold text-yellow-800 flex items-center gap-2 mb-2">
-            <AlertCircle size={18} /> {isHindi ? 'किसान साथी सलाह' : 'KisanSathi Advisor'}
-          </h3>
-          {loadingAdvisory ? (
-            <div className="animate-pulse h-4 bg-yellow-200 rounded w-3/4"></div>
-          ) : (
-            <p className="text-gray-800 text-sm leading-relaxed">
-              "{advisory}"
-            </p>
-          )}
+          <h3 className="font-bold text-yellow-800 flex items-center gap-2 mb-2"><AlertCircle size={18} /> {text.advisorTitle}</h3>
+          {loadingAdvisory ? <div className="animate-pulse h-4 bg-yellow-200 rounded w-3/4"></div> : <p className="text-gray-800 text-sm">{advisory}</p>}
         </div>
 
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold text-gray-700">{isHindi ? 'पिछले दाम' : 'Price History'}</h3>
-            <div className="flex bg-gray-100 rounded-lg p-1">
-              {[7, 15, 30].map((d) => (
-                <button
-                  key={d}
-                  onClick={() => setHistoryPeriod(d as any)}
-                  className={`px-3 py-1 text-xs rounded-md transition-all ${historyPeriod === d ? 'bg-white shadow text-green-700 font-bold' : 'text-gray-500'}`}
-                >
-                  {d}D
-                </button>
-              ))}
-            </div>
-          </div>
-          
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={history}>
@@ -218,10 +168,7 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                 <XAxis dataKey="date" tick={{fontSize: 10}} tickLine={false} axisLine={false} />
                 <YAxis hide domain={['dataMin - 100', 'dataMax + 100']} />
-                <Tooltip 
-                  contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
-                  formatter={(value: number) => [`₹${value}`, 'Price']}
-                />
+                <Tooltip />
                 <Area type="monotone" dataKey="price" stroke="#15803d" strokeWidth={2} fillOpacity={1} fill="url(#colorPrice)" />
               </AreaChart>
             </ResponsiveContainer>
@@ -237,12 +184,8 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
         <>
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">
-                {lang === AppLanguage.HINDI ? 'मंडी भाव' : 'Mandi Prices'}
-              </h1>
-              <p className="text-xs text-gray-500 flex items-center gap-1">
-                <MapPin size={12} /> {locationName || 'India'}
-              </p>
+              <h1 className="text-2xl font-bold text-gray-800">{text.mandiPrices}</h1>
+              <p className="text-xs text-gray-500 flex items-center gap-1"><MapPin size={12} /> {locationName}</p>
             </div>
             <button onClick={fetchPrices} className="p-2 bg-white rounded-lg shadow-sm text-gray-600 border border-gray-200">
               <RefreshCw size={20} className={loadingPrices ? 'animate-spin' : ''} />
@@ -250,59 +193,27 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
           </div>
 
           <div className="space-y-3">
-            {loadingPrices ? (
-              // Skeletons
-              [1,2,3].map(i => (
-                <div key={i} className="bg-white h-24 rounded-xl shadow-sm border border-gray-100 animate-pulse"></div>
-              ))
-            ) : prices.length > 0 ? (
-              prices.map((item) => (
-                <div 
-                  key={item.id} 
-                  onClick={() => setSelectedCrop(item)}
-                  className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer hover:border-green-300 transition-colors"
-                >
+            {loadingPrices ? [1,2,3].map(i => <div key={i} className="bg-white h-24 rounded-xl shadow-sm border border-gray-100 animate-pulse"></div>) : 
+            prices.map((item) => (
+                <div key={item.id} onClick={() => setSelectedCrop(item)} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center cursor-pointer">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-gray-800 text-lg">{item.crop}</h3>
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{item.variety}</span>
-                    </div>
+                    <h3 className="font-bold text-gray-800 text-lg">{item.crop}</h3>
                     <p className="text-sm text-gray-500 mt-1">📍 {item.market}</p>
                   </div>
                   <div className="text-right">
                     <p className="font-bold text-xl text-gray-800">₹{item.price}</p>
                     <div className={`text-xs font-medium flex items-center justify-end gap-1 ${item.change >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                       {item.change >= 0 ? <TrendingUp size={12} /> : <TrendingUp size={12} className="rotate-180" />}
-                      {item.change >= 0 ? '+' : ''}{item.change}%
+                      {item.change}%
                     </div>
                   </div>
                 </div>
-              ))
-            ) : (
-              <div className="text-center py-10 text-gray-500">
-                <p>No prices found.</p>
-              </div>
-            )}
+            ))}
           </div>
           
           <div className="mt-6 p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-             <h3 className="font-bold text-gray-700 mb-2 text-sm flex items-center gap-2">
-               <Newspaper size={16} />
-               {lang === AppLanguage.HINDI ? 'मंडी समाचार (LIVE)' : 'Mandi News (LIVE)'}
-             </h3>
-             {loadingNews ? (
-               <div className="space-y-2 mt-2">
-                 <div className="h-3 bg-gray-100 rounded w-full animate-pulse"></div>
-                 <div className="h-3 bg-gray-100 rounded w-5/6 animate-pulse"></div>
-                 <div className="h-3 bg-gray-100 rounded w-4/6 animate-pulse"></div>
-               </div>
-             ) : (
-               <div className="text-xs text-gray-600 leading-relaxed mt-2 space-y-2 whitespace-pre-wrap">
-                 {news || (lang === AppLanguage.HINDI 
-                   ? 'समाचार उपलब्ध नहीं है।' 
-                   : 'News unavailable currently.')}
-               </div>
-             )}
+             <h3 className="font-bold text-gray-700 mb-2 text-sm flex items-center gap-2"><Newspaper size={16} /> {text.mandiNews}</h3>
+             <div className="text-xs text-gray-600 leading-relaxed mt-2 space-y-2 whitespace-pre-wrap">{news}</div>
           </div>
         </>
       )}

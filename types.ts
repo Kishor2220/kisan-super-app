@@ -1,6 +1,7 @@
 export enum AppLanguage {
   ENGLISH = 'en',
-  HINDI = 'hi'
+  HINDI = 'hi',
+  KANNADA = 'kn'
 }
 
 export interface MandiPrice {
@@ -31,7 +32,7 @@ export interface MarketPrediction {
 export interface Scheme {
   id: string;
   title: string;
-  category: 'subsidy' | 'insurance' | 'loan' | 'pension';
+  category: 'subsidy' | 'insurance' | 'loan' | 'pension' | 'infrastructure' | 'organic';
   description: string;
   eligibility: string[];
   deadline?: string;
@@ -44,6 +45,22 @@ export interface WeatherData {
   windSpeed: number;
   advisory: string;
   rainChance?: number; // percentage
+}
+
+export interface DashboardInsight {
+  decision: 'SELL' | 'HOLD' | 'HARVEST' | 'PROTECT';
+  decisionColor: 'green' | 'red' | 'yellow' | 'blue';
+  mainReason: string; // "Prices rising + Rain incoming"
+  priceOutlook: {
+    yesterday: number;
+    today: number;
+    tomorrowLow: number;
+    tomorrowHigh: number;
+    trend: 'rising' | 'falling' | 'stable';
+    confidence: 'low' | 'medium' | 'high';
+  };
+  weatherImpact: string; // "Rain may delay logistics"
+  newsHeadline: string; // One line critical news
 }
 
 export interface ChatMessage {

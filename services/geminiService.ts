@@ -1,19 +1,19 @@
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
-import { WeatherData, MandiPrice } from '../types';
+import { WeatherData, MandiPrice, DashboardInsight } from '../types';
 
 const apiKey = process.env.API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
 
-// System instruction for the general assistant
+// System instruction for the Karnataka-focused assistant
 const ASSISTANT_INSTRUCTION = `
-You are 'KisanSathi', an expert agricultural advisor for Indian farmers. 
-Your goal is to help small and marginal farmers increase income and reduce risk.
-Answers must be practical, concise, and culturally relevant to India.
-Use Rupee symbol (₹). Mention local units like 'Bigha' or 'Acre' where relevant.
-If asked about prices, clarify these are estimates or recent trends found online.
-If asked about schemes, focus on PM-KISAN, KCC, Fasal Bima Yojana, etc.
-Always be encouraging and respectful.
-Output in the requested language (Hindi or English).
+You are 'KisanSathi', an expert agricultural advisor for farmers in Karnataka, India. 
+Your goal is to help Karnataka farmers (Raitha) increase income and reduce risk.
+Answers must be practical and relevant to Karnataka's geography (Malnad, Bayaluseeme, Coastal).
+Use Rupee symbol (₹). Mention local units like 'Gunta', 'Acre', 'Quintal'.
+Focus on Karnataka crops like Ragi, Paddy, Arecanut, Sugarcane, Coffee, Cotton, Maize, Tomato, Onion.
+Know about Karnataka Government schemes like Raitha Siri, Krishi Bhagya, Bele Parihara, Yeshasvini, etc.
+Output in the requested language (Hindi, Kannada, or English).
+When speaking Kannada, use respectful and natural farmer-friendly language.
 `;
 
 export const getGeminiResponse = async (
@@ -24,14 +24,17 @@ export const getGeminiResponse = async (
   try {
     const modelId = 'gemini-2.5-flash';
     
-    const langInstruction = language === 'hi' 
-      ? "Answer in Hindi (Devanagari script). Keep it simple for a rural audience." 
-      : "Answer in simple English.";
+    let langInstruction = "Answer in simple English.";
+    if (language === 'hi') {
+      langInstruction = "Answer in Hindi.";
+    } else if (language === 'kn') {
+      langInstruction = "Answer in Kannada (Kannada script). Use natural Karnataka farmer dialect.";
+    }
 
     const contents = [];
     if (imagePart) {
       contents.push(imagePart);
-      contents.push({ text: `${langInstruction} Analyze this crop image. Identify disease/pest if any. Suggest low-cost Indian remedies (chemical and organic).` });
+      contents.push({ text: `${langInstruction} Analyze this crop image (likely from Karnataka). Identify disease/pest. Suggest remedies available in Karnataka.` });
     } else {
       contents.push({ text: `${langInstruction} ${prompt}` });
     }
@@ -42,7 +45,6 @@ export const getGeminiResponse = async (
       maxOutputTokens: 500,
     };
 
-    // Add search tool for text-only queries to provide up-to-date info
     if (!imagePart) {
       config.tools = [{ googleSearch: {} }];
     }
@@ -56,80 +58,102 @@ export const getGeminiResponse = async (
     return response.text || "Sorry, I could not understand. Please try again.";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "Error connecting to KisanSathi server. Please check your internet.";
+    return "Error connecting to KisanSathi server.";
   }
 };
 
-export const getMarketAdvisory = async (
-  crop: string,
-  currentPrice: number,
-  predictedTrend: string,
-  weatherCondition: string,
-  language: string
-): Promise<string> => {
+export const getDashboardInsights = async (
+  lat: number, 
+  lon: number, 
+  crop: string, 
+  district: string,
+  lang: string
+): Promise<DashboardInsight> => {
   try {
-    const prompt = `
-    Context: Indian Farmer Market Decision.
-    Crop: ${crop}
-    Current Price: ₹${currentPrice}
-    Tomorrow's Trend: ${predictedTrend}
-    Weather: ${weatherCondition}
+    const langName = lang === 'hi' ? 'Hindi' : (lang === 'kn' ? 'Kannada' : 'English');
     
-    Task: Give 1 sentence of actionable advice. Should he sell now or wait? 
-    Example: "Since rain is coming and prices are dropping, harvest and sell today."
-    ${language === 'hi' ? "Output in Hindi." : "Output in English."}
+    const prompt = `
+      Act as a senior agri-economist for a Karnataka farmer.
+      Context: District: ${district}, Location Lat:${lat}/Lon:${lon}. Main Crop: ${crop}. Date: Today.
+      
+      Task: Search for:
+      1. Real-time weather forecast for ${district}, Karnataka.
+      2. Current mandi price trends for ${crop} in Karnataka (focus on APMC markets in ${district} or nearby like Bengaluru/Hubballi/Shivamogga).
+      3. Any urgent pest alerts or logistics issues in Karnataka.
+
+      Synthesize this into a structured decision.
+      Output strictly in this PIPE-SEPARATED format (no markdown):
+      DECISION|COLOR|REASON|YESTERDAY_PRICE|TODAY_PRICE|TOMORROW_LOW|TOMORROW_HIGH|TREND|CONFIDENCE|WEATHER_IMPACT|NEWS
+      
+      Values allowed:
+      - DECISION: "SELL NOW", "HOLD", "HARVEST", "PROTECT"
+      - COLOR: "green", "red", "yellow", "blue"
+      - REASON: 1 short sentence in ${langName}.
+      - YESTERDAY_PRICE: number (e.g. 2100)
+      - TODAY_PRICE: number (e.g. 2150)
+      - TOMORROW_LOW: number
+      - TOMORROW_HIGH: number
+      - TREND: "rising", "falling", "stable"
+      - CONFIDENCE: "low", "medium", "high"
+      - WEATHER_IMPACT: 1 short sentence in ${langName}.
+      - NEWS: 1 very short headline in ${langName}.
     `;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: { parts: [{ text: prompt }] },
-      config: { temperature: 0.3, maxOutputTokens: 100 }
-    });
-
-    return response.text || "Market is volatile. Please check locally.";
-  } catch (e) {
-    return "Advisory unavailable offline.";
-  }
-};
-
-export const getMandiNews = async (language: string): Promise<string> => {
-  try {
-    const prompt = language === 'hi' 
-      ? "Find the latest agricultural market news for onion, tomato, and cotton in Maharashtra, India. Summarize 3 key headlines in Hindi."
-      : "Find the latest agricultural market news for onion, tomato, and cotton in Maharashtra, India. Summarize 3 key headlines.";
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: { parts: [{ text: prompt }] },
       config: {
         tools: [{ googleSearch: {} }],
-        maxOutputTokens: 300,
+        maxOutputTokens: 200,
+        temperature: 0.2,
       }
     });
 
-    return response.text || "News unavailable.";
+    const text = response.text || "";
+    const parts = text.trim().split('|');
+
+    if (parts.length >= 11) {
+      return {
+        decision: parts[0] as any,
+        decisionColor: parts[1] as any,
+        mainReason: parts[2],
+        priceOutlook: {
+          yesterday: parseInt(parts[3]) || 0,
+          today: parseInt(parts[4]) || 0,
+          tomorrowLow: parseInt(parts[5]) || 0,
+          tomorrowHigh: parseInt(parts[6]) || 0,
+          trend: parts[7] as any,
+          confidence: parts[8] as any,
+        },
+        weatherImpact: parts[9],
+        newsHeadline: parts[10]
+      };
+    }
+    throw new Error("Parsing failed");
   } catch (error) {
-    console.error("News Fetch Error", error);
-    return "Could not fetch live news.";
+    console.error("Dashboard Insight Error", error);
+    return {
+      decision: 'HOLD',
+      decisionColor: 'yellow',
+      mainReason: lang === 'kn' ? 'ಡೇಟಾ ಲಭ್ಯವಿಲ್ಲ, ದಯವಿಟ್ಟು ನಿರೀಕ್ಷಿಸಿ.' : 'Data unavailable, holding recommended.',
+      priceOutlook: { yesterday: 0, today: 0, tomorrowLow: 0, tomorrowHigh: 0, trend: 'stable', confidence: 'low' },
+      weatherImpact: lang === 'kn' ? 'ಹವಾಮಾನ ಮಾಹಿತಿ ಲಭ್ಯವಿಲ್ಲ.' : 'Weather update unavailable.',
+      newsHeadline: ''
+    };
   }
 };
 
 export const getLocalWeather = async (lat: number, lon: number, lang: string): Promise<WeatherData | null> => {
   try {
+    const langName = lang === 'hi' ? 'Hindi' : (lang === 'kn' ? 'Kannada' : 'English');
     const prompt = `
-      Find current weather for latitude ${lat}, longitude ${lon}.
-      Return the data in this specific pipe-separated format:
+      Find current weather for latitude ${lat}, longitude ${lon} (Karnataka).
+      Return data in pipe-separated format:
       TEMP|CONDITION|HUMIDITY|WIND_SPEED|ADVISORY_TEXT
       
-      Example:
-      32|Sunny|45|12|Wear a hat
-      
       Rules:
-      - Temp in Celsius (just number)
-      - Humidity in % (just number)
-      - Wind speed in km/h (just number)
-      - Condition in ${lang === 'hi' ? 'Hindi' : 'English'}
-      - Advisory in ${lang === 'hi' ? 'Hindi' : 'English'} (Max 10 words, practical farming advice like 'Good for spraying' or 'Delay irrigation')
+      - Condition and Advisory in ${langName}.
+      - Advisory should be practical for Karnataka crops.
     `;
 
     const response = await ai.models.generateContent({
@@ -142,8 +166,7 @@ export const getLocalWeather = async (lat: number, lon: number, lang: string): P
     });
 
     const text = response.text || "";
-    const cleanText = text.trim();
-    const parts = cleanText.split('|');
+    const parts = text.trim().split('|');
     
     if (parts.length >= 5) {
       return {
@@ -156,29 +179,21 @@ export const getLocalWeather = async (lat: number, lon: number, lang: string): P
     }
     return null;
   } catch (error) {
-    console.error("Weather fetch failed", error);
     return null;
   }
 };
 
-// Fetches real-time prices using Search Grounding and parses into MandiPrice objects
 export const getRealMandiPrices = async (location: string, lang: string): Promise<MandiPrice[]> => {
   try {
-    // If location is generic, default to a major agri state for better results
-    const searchLoc = location.includes('Locating') ? 'Maharashtra' : location;
+    const searchLoc = location.includes('Locating') ? 'Karnataka' : location;
     
     const prompt = `
-      Find current mandi prices for Onion, Cotton, Soybean, and Tomato in ${searchLoc}, India.
-      Return 4 items strictly in this pipe-separated format:
+      Find current mandi prices for key crops in ${searchLoc}, Karnataka.
+      Prioritize: Arecanut, Ragi, Paddy, Cotton, Tomato, Onion.
+      Return 4 items strictly in pipe-separated format:
       CROP|VARIETY|MARKET|PRICE|CHANGE_PERCENT|TREND
       
-      Rules:
-      - Price in ₹ per Quintal (number only)
-      - Change percent (number only, e.g. 5 or -2). If unknown, guess based on trend.
-      - Trend must be 'up', 'down', or 'stable'
-      - Variety example: 'Red', 'Hybrid', 'Local'
-      - Example line: Onion|Red|Lasalgaon|2400|5|up
-      - Do not add markdown formatting.
+      Example: Arecanut|Rashi|Shivamogga|45000|2|up
     `;
 
     const response = await ai.models.generateContent({
@@ -205,7 +220,7 @@ export const getRealMandiPrices = async (location: string, lang: string): Promis
           change: parseFloat(parts[4]) || 0,
           trend: (parts[5].trim().toLowerCase() as 'up'|'down'|'stable') || 'stable',
           date: new Date().toLocaleDateString(),
-          arrivalVolume: 'medium' // Defaulting as this is hard to scrape consistently in one go
+          arrivalVolume: 'medium'
         });
       }
     });
@@ -219,15 +234,12 @@ export const getRealMandiPrices = async (location: string, lang: string): Promis
 
 export const getSchemeRecommendations = async (profile: string, lang: string): Promise<string> => {
   try {
+    const langName = lang === 'hi' ? 'Hindi' : (lang === 'kn' ? 'Kannada' : 'English');
     const prompt = `
-      User Profile: ${profile}
-      Based on this Indian farmer's profile, recommend 3 specific government schemes they are eligible for.
-      For each scheme, provide: 
-      1. Scheme Name
-      2. One line benefit (e.g., "₹6000/year")
-      3. One line how to apply.
-      
-      Output in ${lang === 'hi' ? 'Hindi' : 'English'}. Keep it simple and encouraging.
+      User Profile: ${profile}, State: Karnataka.
+      Recommend 3 government schemes (Karnataka State or Central) eligible for this farmer.
+      Prioritize Karnataka schemes like Raitha Siri, Krishi Bhagya, Yashasvini, etc.
+      Output in ${langName}.
     `;
 
     const response = await ai.models.generateContent({
@@ -242,5 +254,56 @@ export const getSchemeRecommendations = async (profile: string, lang: string): P
     return response.text || "No schemes found.";
   } catch (error) {
     return "Error finding schemes.";
+  }
+};
+
+export const getMandiNews = async (lang: string): Promise<string> => {
+  try {
+    const langName = lang === 'hi' ? 'Hindi' : (lang === 'kn' ? 'Kannada' : 'English');
+    const prompt = `
+      Search latest agriculture news in Karnataka.
+      Focus on MSP, rainfall in Malnad/North Karnataka, or APMC updates.
+      Output in ${langName}.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: { parts: [{ text: prompt }] },
+      config: {
+        tools: [{ googleSearch: {} }],
+        maxOutputTokens: 300,
+      }
+    });
+
+    return response.text || "No news available.";
+  } catch (error) {
+    return "News unavailable currently.";
+  }
+};
+
+export const getMarketAdvisory = async (
+  crop: string, 
+  price: number, 
+  trend: string, 
+  weatherCtx: string, 
+  lang: string
+): Promise<string> => {
+  try {
+    const langName = lang === 'hi' ? 'Hindi' : (lang === 'kn' ? 'Kannada' : 'English');
+    const prompt = `
+      Advisor for Karnataka Farmer.
+      Crop: ${crop}, Price: ₹${price}, Trend: ${trend}, Weather: ${weatherCtx}.
+      Give advice in ${langName}.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: { parts: [{ text: prompt }] },
+      config: { maxOutputTokens: 150 }
+    });
+
+    return response.text || "Advice unavailable.";
+  } catch (error) {
+    return "Advice unavailable.";
   }
 };
