@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowUp, ArrowDown, TrendingUp, Filter, ChevronLeft, CloudRain, AlertCircle, Calendar } from 'lucide-react';
+import { ArrowUp, ArrowDown, TrendingUp, Filter, ChevronLeft, CloudRain, AlertCircle, Calendar, Newspaper } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { MandiPrice, AppLanguage, HistoricalDataPoint, MarketPrediction } from '../types';
-import { getMarketAdvisory } from '../services/geminiService';
+import { getMarketAdvisory, getMandiNews } from '../services/geminiService';
 
 interface MandiProps {
   lang: AppLanguage;
@@ -13,6 +13,8 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
   const [advisory, setAdvisory] = useState<string>('');
   const [loadingAdvisory, setLoadingAdvisory] = useState(false);
   const [historyPeriod, setHistoryPeriod] = useState<7 | 15 | 30>(7);
+  const [news, setNews] = useState<string>('');
+  const [loadingNews, setLoadingNews] = useState(false);
 
   // Mock Data: Current Prices
   const prices: MandiPrice[] = [
@@ -75,6 +77,15 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
       });
     }
   }, [selectedCrop, lang]);
+
+  useEffect(() => {
+    // Fetch news when component mounts or lang changes
+    setLoadingNews(true);
+    getMandiNews(lang).then(newsText => {
+      setNews(newsText);
+      setLoadingNews(false);
+    });
+  }, [lang]);
 
   const renderDetailView = () => {
     if (!selectedCrop) return null;
@@ -241,12 +252,23 @@ const Mandi: React.FC<MandiProps> = ({ lang }) => {
           </div>
           
           <div className="mt-6 p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-             <h3 className="font-bold text-gray-700 mb-2 text-sm">{lang === AppLanguage.HINDI ? 'मंडी समाचार' : 'Mandi News'}</h3>
-             <p className="text-xs text-gray-500 leading-relaxed">
-               {lang === AppLanguage.HINDI 
-                 ? 'नासिक मंडी में प्याज की आवक बढ़ी है। अगले 2 दिनों में भाव थोड़े कम हो सकते हैं।' 
-                 : 'Onion arrivals in Nashik have increased. Prices may dip slightly in next 2 days.'}
-             </p>
+             <h3 className="font-bold text-gray-700 mb-2 text-sm flex items-center gap-2">
+               <Newspaper size={16} />
+               {lang === AppLanguage.HINDI ? 'मंडी समाचार (LIVE)' : 'Mandi News (LIVE)'}
+             </h3>
+             {loadingNews ? (
+               <div className="space-y-2 mt-2">
+                 <div className="h-3 bg-gray-100 rounded w-full animate-pulse"></div>
+                 <div className="h-3 bg-gray-100 rounded w-5/6 animate-pulse"></div>
+                 <div className="h-3 bg-gray-100 rounded w-4/6 animate-pulse"></div>
+               </div>
+             ) : (
+               <div className="text-xs text-gray-600 leading-relaxed mt-2 space-y-2 whitespace-pre-wrap">
+                 {news || (lang === AppLanguage.HINDI 
+                   ? 'समाचार उपलब्ध नहीं है।' 
+                   : 'News unavailable currently.')}
+               </div>
+             )}
           </div>
         </>
       )}

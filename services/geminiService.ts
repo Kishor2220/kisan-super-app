@@ -9,7 +9,7 @@ You are 'KisanSathi', an expert agricultural advisor for Indian farmers.
 Your goal is to help small and marginal farmers increase income and reduce risk.
 Answers must be practical, concise, and culturally relevant to India.
 Use Rupee symbol (₹). Mention local units like 'Bigha' or 'Acre' where relevant.
-If asked about prices, clarify these are estimates.
+If asked about prices, clarify these are estimates or recent trends found online.
 If asked about schemes, focus on PM-KISAN, KCC, Fasal Bima Yojana, etc.
 Always be encouraging and respectful.
 Output in the requested language (Hindi or English).
@@ -21,7 +21,7 @@ export const getGeminiResponse = async (
   imagePart?: { inlineData: { data: string; mimeType: string } }
 ): Promise<string> => {
   try {
-    const modelId = imagePart ? 'gemini-2.5-flash' : 'gemini-2.5-flash';
+    const modelId = 'gemini-2.5-flash';
     
     const langInstruction = language === 'hi' 
       ? "Answer in Hindi (Devanagari script). Keep it simple for a rural audience." 
@@ -35,14 +35,21 @@ export const getGeminiResponse = async (
       contents.push({ text: `${langInstruction} ${prompt}` });
     }
 
+    const config: any = {
+      systemInstruction: ASSISTANT_INSTRUCTION,
+      temperature: 0.4, 
+      maxOutputTokens: 500,
+    };
+
+    // Add search tool for text-only queries to provide up-to-date info
+    if (!imagePart) {
+      config.tools = [{ googleSearch: {} }];
+    }
+
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: modelId,
       contents: { parts: contents as any },
-      config: {
-        systemInstruction: ASSISTANT_INSTRUCTION,
-        temperature: 0.4, 
-        maxOutputTokens: 500,
-      }
+      config: config
     });
 
     return response.text || "Sorry, I could not understand. Please try again.";
@@ -82,5 +89,27 @@ export const getMarketAdvisory = async (
     return response.text || "Market is volatile. Please check locally.";
   } catch (e) {
     return "Advisory unavailable offline.";
+  }
+};
+
+export const getMandiNews = async (language: string): Promise<string> => {
+  try {
+    const prompt = language === 'hi' 
+      ? "Find the latest agricultural market news for onion, tomato, and cotton in Maharashtra, India. Summarize 3 key headlines in Hindi."
+      : "Find the latest agricultural market news for onion, tomato, and cotton in Maharashtra, India. Summarize 3 key headlines.";
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: { parts: [{ text: prompt }] },
+      config: {
+        tools: [{ googleSearch: {} }],
+        maxOutputTokens: 300,
+      }
+    });
+
+    return response.text || "News unavailable.";
+  } catch (error) {
+    console.error("News Fetch Error", error);
+    return "Could not fetch live news.";
   }
 };
